@@ -29,7 +29,6 @@ DROP_COLS = [
     "mutual_matches",       # Target leakage – directly encodes match info
     "app_usage_time_label", # Derived bin of app_usage_time_min (redundant)
     "swipe_right_label",    # Derived bin of swipe_right_ratio (redundant)
-    "interest_tags",        # Multi-value text – out of scope
     "sexual_orientation",   # Not in recommended feature list
 ]
 
@@ -47,6 +46,8 @@ NUMERICAL_FEATURES = [
     "EngagementScore",
     "ProfileQuality",
     "ActivityIntensity",
+    "interest_tags_count",
+    "EngagementIntensity",
 ]
 
 CATEGORICAL_FEATURES = [
@@ -101,6 +102,7 @@ def load_and_clean(csv_path: str) -> pd.DataFrame:
 
     # Encode target as integers (required by XGBoost)
     df[TARGET] = label_encoder.fit_transform(df[TARGET])
+    
     global CLASS_NAMES
     CLASS_NAMES = list(label_encoder.classes_)
     print(f"[Preprocessing] Encoded target classes: {CLASS_NAMES}")

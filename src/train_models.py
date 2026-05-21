@@ -27,10 +27,12 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import LinearSVC
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.ensemble import VotingClassifier
 from xgboost import XGBClassifier
 from imblearn.pipeline import Pipeline as ImbPipeline
-from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTEENN
 
 warnings.filterwarnings("ignore")
 
@@ -59,7 +61,7 @@ def _get_models_and_params(use_smote: bool = False):
                 random_state=42,
             ),
             {
-                f"{prefix}C": [0.1, 1.0, 10.0],
+                f"{prefix}C": [0.01, 0.1, 1.0, 10.0, 100.0],
             },
         ),
         # ---- 2. Decision Tree ----
@@ -70,8 +72,9 @@ def _get_models_and_params(use_smote: bool = False):
                 random_state=42,
             ),
             {
-                f"{prefix}max_depth": [10, 20, None],
-                f"{prefix}min_samples_split": [2, 10],
+                f"{prefix}max_depth": [10, 20, 30, None],
+                f"{prefix}min_samples_split": [2, 5, 10, 20],
+                f"{prefix}min_samples_leaf": [1, 5, 10],
             },
         ),
         # ---- 3. Random Forest ----
@@ -83,8 +86,9 @@ def _get_models_and_params(use_smote: bool = False):
                 n_jobs=1,
             ),
             {
-                f"{prefix}n_estimators": [100],
-                f"{prefix}max_depth": [10, 20],
+                f"{prefix}n_estimators": [100, 200, 300],
+                f"{prefix}max_depth": [10, 20, 30, None],
+                f"{prefix}min_samples_split": [2, 5, 10],
             },
         ),
         # ---- 4. XGBoost ----
@@ -96,9 +100,10 @@ def _get_models_and_params(use_smote: bool = False):
                 n_jobs=1,
             ),
             {
-                f"{prefix}learning_rate": [0.1],
-                f"{prefix}max_depth": [5, 10],
-                f"{prefix}n_estimators": [100],
+                f"{prefix}learning_rate": [0.01, 0.05, 0.1, 0.2],
+                f"{prefix}max_depth": [3, 5, 7, 10],
+                f"{prefix}n_estimators": [100, 200, 300],
+                f"{prefix}subsample": [0.8, 1.0],
             },
         ),
         # ---- 5. SVM ----
@@ -110,14 +115,13 @@ def _get_models_and_params(use_smote: bool = False):
                 max_iter=1000,
             ),
             {
-                f"{prefix}C": [0.1, 1.0],
+                f"{prefix}C": [0.01, 0.1, 1.0, 10.0],
             },
         ),
         # ---- 6. Neural Network (MLP) ----
         (
             "Neural Network (MLP)",
             MLPClassifier(
-                hidden_layer_sizes=(128, 64),
                 activation="relu",
                 max_iter=500,
                 random_state=42,
@@ -125,8 +129,9 @@ def _get_models_and_params(use_smote: bool = False):
                 validation_fraction=0.1,
             ),
             {
-                f"{prefix}hidden_layer_sizes": [(64, 32)],
-                f"{prefix}alpha": [0.0001],
+                f"{prefix}hidden_layer_sizes": [(64, 32), (128, 64), (128, 64, 32)],
+                f"{prefix}alpha": [0.0001, 0.001, 0.01],
+                f"{prefix}learning_rate_init": [0.001, 0.01],
             },
         ),
     ]
@@ -168,25 +173,29 @@ def train_all_models(
         if use_smote and name != "Dummy (Baseline)":
             pipe = ImbPipeline([
                 ("preprocessor", preprocessor),
-                ("smote", SMOTE(random_state=42)),
+                ("selector", SelectKBest(score_func=f_classif, k=15)), # Feature Selection
+                ("smote", SMOTEENN(random_state=42)),
                 ("model", estimator),
             ])
         else:
             pipe = Pipeline([
                 ("preprocessor", preprocessor),
+                ("selector", SelectKBest(score_func=f_classif, k=15)), # Feature Selection
                 ("model", estimator),
             ])
 
         # Hyperparameter tuning
         if param_grid:
-            grid = GridSearchCV(
+            grid = RandomizedSearchCV(
                 pipe,
-                param_grid={f"model__{k}" if not k.startswith("model__") else k: v
-                            for k, v in param_grid.items()},
+                param_distributions={f"model__{k}" if not k.startswith("model__") else k: v
+                                     for k, v in param_grid.items()},
+                n_iter=10, # To keep training time reasonable
                 cv=3,
                 scoring="f1_weighted",
                 n_jobs=-1,
                 verbose=0,
+                random_state=42,
             )
             grid.fit(X_train, y_train)
             best_pipe = grid.best_estimator_
@@ -202,6 +211,41 @@ def train_all_models(
         joblib.dump(best_pipe, os.path.join(models_dir, fname))
 
         fitted[name] = best_pipe
+
+    # ==== Add Voting Classifier ====
+    print(f"\n{'-'*60}")
+    print("  Training: Voting Classifier" + (" [SMOTE]" if use_smote else ""))
+    print(f"{'-'*60}")
+    sys.stdout.flush()
+
+    # Extract best estimators from the fitted pipelines to construct the voting classifier
+    estimators = [
+        ("lr", fitted["Logistic Regression"].named_steps["model"]),
+        ("rf", fitted["Random Forest"].named_steps["model"]),
+        ("xgb", fitted["XGBoost"].named_steps["model"])
+    ]
+    voting_clf = VotingClassifier(estimators=estimators, voting="hard") # using hard voting since LinearSVC doesn't support predict_proba by default, but we aren't including SVC. Let's stick to hard voting to be safe, or soft if all support it. XGB/RF/LR support soft.
+    voting_clf.voting = "soft"
+
+    if use_smote:
+        voting_pipe = ImbPipeline([
+            ("preprocessor", preprocessor),
+            ("selector", SelectKBest(score_func=f_classif, k=15)),
+            ("smote", SMOTEENN(random_state=42)),
+            ("model", voting_clf)
+        ])
+    else:
+        voting_pipe = Pipeline([
+            ("preprocessor", preprocessor),
+            ("selector", SelectKBest(score_func=f_classif, k=15)),
+            ("model", voting_clf)
+        ])
+    
+    voting_pipe.fit(X_train, y_train)
+    fitted["Voting Classifier"] = voting_pipe
+    
+    suffix = "_smote" if use_smote else ""
+    joblib.dump(voting_pipe, os.path.join(models_dir, f"voting_classifier{suffix}.pkl"))
 
     print(f"\n[Training] All models saved to: {models_dir}")
     return fitted

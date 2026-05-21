@@ -98,7 +98,6 @@ def main():
     fitted_balanced = train_all_models(
         preprocessor, X_train, y_train, MODELS_DIR, use_smote=False
     )
-
     # ──────────────────────────────────────────────────────────────────────
     # 6. TRAIN MODELS — SMOTE approach
     # ──────────────────────────────────────────────────────────────────────
@@ -107,6 +106,7 @@ def main():
     fitted_smote = train_all_models(
         preprocessor_smote, X_train, y_train, MODELS_DIR, use_smote=True
     )
+
 
     # ──────────────────────────────────────────────────────────────────────
     # 7. EVALUATE BOTH APPROACHES
@@ -165,7 +165,6 @@ def main():
     print(f"  Reports saved to:        {REPORTS_DIR}")
     print(f"  Visualisations saved to: {VIZ_DIR}")
 
-    # Print best model
     best = comp_balanced.iloc[0]
     print(f"\n  [BEST] Best Model (balanced): {best['Model']}")
     print(f"     F1 (weighted):  {best['F1_Weighted']}")

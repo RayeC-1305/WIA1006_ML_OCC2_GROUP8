@@ -7,12 +7,18 @@ Outputs all figures to the visualizations/ directory.
 """
 
 import os
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
+import shap
+
+# Set beautiful seaborn theme for all plots
+sns.set_theme(style="whitegrid", palette="husl", font_scale=1.1)
+plt.rcParams['figure.dpi'] = 300  # High resolution for all plots
+
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.metrics import (
     confusion_matrix,
     ConfusionMatrixDisplay,
@@ -192,6 +198,11 @@ def plot_feature_importance(fitted_models, feature_names, viz_dir):
         num_names = list(preprocessor.transformers_[0][2])  # numerical col names
         all_names = num_names + cat_names
 
+        selector = model.named_steps.get("selector")
+        if selector is not None:
+            mask = selector.get_support()
+            all_names = [name for name, m in zip(all_names, mask) if m]
+
         # If lengths mismatch, fallback to indices
         if len(all_names) != len(importances):
             all_names = [f"f{i}" for i in range(len(importances))]
@@ -266,9 +277,19 @@ def plot_shap_summary(fitted_models, X_test, preprocessor, viz_dir):
     num_names = list(prep.transformers_[0][2])
     all_names = num_names + cat_names
 
-    # SHAP
+    selector = xgb_model.named_steps.get("selector")
+    if selector is not None:
+        mask = selector.get_support()
+        all_names = [name for name, m in zip(all_names, mask) if m]
+        X_transformed = selector.transform(X_transformed)
+
+    # SHAP (Sampled to avoid hanging)
+    np.random.seed(42)
+    sample_indices = np.random.choice(X_transformed.shape[0], size=min(200, X_transformed.shape[0]), replace=False)
+    X_sample = X_transformed[sample_indices]
+
     explainer = shap.TreeExplainer(clf)
-    shap_values = explainer.shap_values(X_transformed)
+    shap_values = explainer.shap_values(X_sample)
 
     fig = plt.figure(figsize=(12, 8))
     # For multi-class, shap_values is a list; use first class or average
@@ -279,8 +300,8 @@ def plot_shap_summary(fitted_models, X_test, preprocessor, viz_dir):
 
     shap.summary_plot(
         shap_vals,
-        X_transformed,
-        feature_names=all_names if len(all_names) == X_transformed.shape[1] else None,
+        X_sample,
+        feature_names=all_names if len(all_names) == X_sample.shape[1] else None,
         show=False,
         max_display=15,
     )
@@ -295,14 +316,21 @@ def plot_shap_summary(fitted_models, X_test, preprocessor, viz_dir):
             rf_clf = rf_model.named_steps.get("model") or rf_model[-1]
             rf_prep = rf_model.named_steps["preprocessor"]
             X_rf = rf_prep.transform(X_test)
+            
+            rf_selector = rf_model.named_steps.get("selector")
+            if rf_selector is not None:
+                X_rf = rf_selector.transform(X_rf)
+
+            X_rf_sample = X_rf[sample_indices]
+
             explainer_rf = shap.TreeExplainer(rf_clf)
-            shap_vals_rf = explainer_rf.shap_values(X_rf)
+            shap_vals_rf = explainer_rf.shap_values(X_rf_sample)
             if isinstance(shap_vals_rf, list):
                 shap_vals_rf = np.abs(np.array(shap_vals_rf)).mean(axis=0)
             fig_rf = plt.figure(figsize=(12, 8))
             shap.summary_plot(
-                shap_vals_rf, X_rf,
-                feature_names=all_names if len(all_names) == X_rf.shape[1] else None,
+                shap_vals_rf, X_rf_sample,
+                feature_names=all_names if len(all_names) == X_rf_sample.shape[1] else None,
                 show=False, max_display=15,
             )
             fig_rf = plt.gcf()
