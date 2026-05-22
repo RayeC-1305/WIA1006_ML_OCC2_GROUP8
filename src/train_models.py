@@ -1,18 +1,19 @@
 """
 train_models.py
 ----------------
-Train 6 ML models + DummyClassifier baseline.
+Train 7 ML models with Logistic Regression as baseline.
 
 Models:
-    1. Logistic Regression   (Linear)
+    1. Logistic Regression   (Linear - Baseline)
     2. Decision Tree          (Rule-Based)
     3. Random Forest          (Bagging Ensemble)
     4. XGBoost                (Boosting Ensemble)
     5. SVM                    (Margin-Based)
     6. MLPClassifier          (Neural Network)
+    7. Voting Classifier      (Ensemble: LR + RF + XGB)
 
 Supports both class_weight='balanced' and SMOTE for imbalance handling.
-Hyperparameter tuning via GridSearchCV(cv=5, scoring='f1_weighted').
+Hyperparameter tuning via RandomizedSearchCV(cv=3, scoring='f1_weighted').
 """
 
 import os
@@ -21,7 +22,6 @@ import warnings
 import joblib
 import numpy as np
 from sklearn.pipeline import Pipeline
-from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -46,13 +46,7 @@ def _get_models_and_params(use_smote: bool = False):
     prefix = "model__" if use_smote else ""
 
     models = [
-        # ---- Baseline ----
-        (
-            "Dummy (Baseline)",
-            DummyClassifier(strategy="most_frequent"),
-            {},
-        ),
-        # ---- 1. Logistic Regression ----
+        # ---- 1. Logistic Regression (Baseline) ----
         (
             "Logistic Regression",
             LogisticRegression(
@@ -165,12 +159,12 @@ def train_all_models(
 
     for name, estimator, param_grid in models_and_params:
         print(f"\n{'-'*60}")
-        print(f"  Training: {name}" + (" [SMOTE]" if use_smote and name != "Dummy (Baseline)" else ""))
+        print(f"  Training: {name}" + (" [SMOTE]" if use_smote else ""))
         print(f"{'-'*60}")
         sys.stdout.flush()
 
         # Build pipeline
-        if use_smote and name != "Dummy (Baseline)":
+        if use_smote:
             pipe = ImbPipeline([
                 ("preprocessor", preprocessor),
                 ("selector", SelectKBest(score_func=f_classif, k=15)), # Feature Selection
@@ -206,7 +200,7 @@ def train_all_models(
             best_pipe = pipe
 
         # Save model
-        suffix = "_smote" if use_smote and name != "Dummy (Baseline)" else ""
+        suffix = "_smote" if use_smote else ""
         fname = name.lower().replace(" ", "_").replace("(", "").replace(")", "") + suffix + ".pkl"
         joblib.dump(best_pipe, os.path.join(models_dir, fname))
 

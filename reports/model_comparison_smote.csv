@@ -6,4 +6,3 @@ Rank,Model,Accuracy,Precision,Recall,F1_Weighted,ROC_AUC
 5,Voting Classifier (SMOTE),0.316,0.3449,0.316,0.2954,0.5077
 6,XGBoost (SMOTE),0.3138,0.3416,0.3138,0.2912,0.5072
 7,SVM (SMOTE),0.3063,0.3608,0.3063,0.2462,N/A
-8,Dummy (Baseline) (SMOTE),0.397,0.1576,0.397,0.2256,0.5

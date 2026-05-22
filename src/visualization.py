@@ -138,8 +138,6 @@ def plot_roc_curves(fitted_models, X_test, y_test, classes, viz_dir, display_lab
     for cls_idx, cls_name in enumerate(labels):
         ax = axes[cls_idx]
         for name, model in fitted_models.items():
-            if name == "Dummy (Baseline)":
-                continue
             try:
                 y_prob = model.predict_proba(X_test)
                 fpr, tpr, _ = roc_curve(y_test_bin[:, cls_idx], y_prob[:, cls_idx])
@@ -160,7 +158,7 @@ def plot_roc_curves(fitted_models, X_test, y_test, classes, viz_dir, display_lab
 def plot_model_comparison(comparison_df, viz_dir):
     """Bar chart comparing models by key metrics."""
     metrics = ["Accuracy", "Precision", "Recall", "F1_Weighted"]
-    df_plot = comparison_df[comparison_df["Model"] != "Dummy (Baseline)"].copy()
+    df_plot = comparison_df.copy()
 
     fig, ax = plt.subplots(figsize=(12, 6))
     x = np.arange(len(df_plot))
