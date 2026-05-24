@@ -1,9 +1,14 @@
 # Tying the (Data) Knot: Love, Life & Likes
-## Final Group Project Report
+## Group Project Report
 
 **Course:** WIA1006/WID3006 Machine Learning
-**Group Members:** [Please insert group members' names here]
-
+**Group Members (Group 8):**
+- Raye Chan Jun Foong (Leader) - Pipeline Architecture & XGBoost
+- Yip Zheng Xyun - Data Preprocessing & Feature Engineering
+- Hon Chi Fung - Logistic Regression & Feature Selection
+- Ong Zheng Xi - Random Forest & Hyperparameter Tuning
+- Daniel Goh Zhi Qian - Decision Tree & Error Analysis
+- Lau Wei Zhong - SVM & Ensembling
 ---
 
 ### 1. Problem and Objective

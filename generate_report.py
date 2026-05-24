@@ -59,6 +59,33 @@ def _fix_thead(m):
 
 html = re.sub(r'<table[^>]*>.*?</table>', lambda m: fix_table(m), html, flags=re.DOTALL)
 
+# Step 4b: Convert index <th> in tbody to <td class="index-cell">
+def fix_index_cells(match):
+    tbody_html = match.group(0)
+    # Replace <th>...</th> inside tbody with styled <td> with inline width
+    tbody_html = re.sub(r'<th([^>]*)>', r'<td class="index-cell" style="width:50px;padding:5px 10px;text-align:center;background-color:#eaf2f8;font-weight:bold"\1>', tbody_html)
+    tbody_html = re.sub(r'</th>', '</td>', tbody_html)
+    # Restore the thead <th> tags (undo the replacement in thead)
+    def restore_thead(m):
+        return re.sub(r'<td class="index-cell"[^>]*>', '<th', m.group(0)).replace('</td>', '</th>')
+    tbody_html = re.sub(r'<thead>.*?</thead>', restore_thead, tbody_html, flags=re.DOTALL)
+    return tbody_html
+
+html = re.sub(r'<tbody>.*?</tbody>', fix_index_cells, html, flags=re.DOTALL)
+
+# Step 4c: Add colgroup to give first column more width
+def add_colgroup(match):
+    table_html = match.group(0)
+    first_row_match = re.search(r'<thead>.*?<tr>(.*?)</tr>', table_html, flags=re.DOTALL)
+    if first_row_match:
+        col_count = len(re.findall(r'<t[hd]', first_row_match.group(1)))
+        if col_count > 0:
+            colgroup = '<colgroup><col style="width:30%">' + '<col>' * (col_count - 1) + '</colgroup>'
+            table_html = re.sub(r'(<table[^>]*>)', r'\1' + colgroup, table_html, count=1)
+    return table_html
+
+html = re.sub(r'<table[^>]*>.*?</table>', lambda m: add_colgroup(m), html, flags=re.DOTALL)
+
 # Step 5: Inject clean CSS (NO pseudo-selectors)
 report_css = """
 <style>
@@ -137,6 +164,17 @@ td {
     border: 1px solid #ddd;
     text-align: center;
     word-wrap: break-word;
+}
+/* Index column cells (converted from th to td.index-cell in post-processing) */
+td.index-cell {
+    background-color: #eaf2f8;
+    color: #2c3e50;
+    font-weight: bold;
+    text-align: center;
+    padding: 3px 5px;
+    border: 1px solid #ddd;
+    word-wrap: break-word;
+    overflow: hidden;
 }
 
 /* Standard tables (7 cols or fewer) */
